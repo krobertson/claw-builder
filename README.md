@@ -153,7 +153,7 @@ capabilities:
     end
 
 Formulas also support inheritance and overriding options from the base.  Currently,
-they can't remove things already set like sources ot dependencies, but can add to
+they can't remove things already set like sources to dependencies, but can add to
 or alter single value settings like name, version, noarch.
 
     require 'php5'
