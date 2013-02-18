@@ -2,8 +2,9 @@ fs            = require('fs')
 path          = require('path')
 temp          = require('temp')
 nats          = require('nats').connect()
-app           = require('express').createServer()
-io            = require('socket.io').listen(app)
+app           = require('express')
+http          = require('http').createServer(app)
+io            = require('socket.io').listen(http)
 createBuilder = require('./builder')
 jshashtable   = require('./support/jshashtable')
 
@@ -55,7 +56,8 @@ nats.subscribe "claw.builder.worker", (msg,reply) ->
   }
   nats.publish reply, JSON.stringify(reply_message)
 
-app.listen 8081
+
+http.listen(8081)
 io.sockets.on 'connection', (socket) ->
   socket.on 'process', (data) ->
     # process the build

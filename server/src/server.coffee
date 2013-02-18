@@ -6,8 +6,8 @@ io_client = require('socket.io-client')
 io_server = require('socket.io')
 redis     = require('redis')
 async     = require('async')
-app       = express.createServer()
-io_server = require('socket.io').listen(app)
+http      = require('http')
+app       = express()
 
 BUILDERS = {}
 
@@ -35,11 +35,14 @@ get_host = (host) ->
 
 rc = redis.createClient();
 
-app.listen 8080
+hs = http.createServer(app)
+hs.listen(8080)
 app.use express.bodyParser()
 app.use express.static("#{__dirname}/public")
 app.set "view engine", "html"
-app.register ".html", require("jqtpl").express
+#app.engine ".html", require("jqtpl").express
+io_server = require('socket.io').listen(hs)
+
 
 # main page
 app.get '/', (req,res) ->
