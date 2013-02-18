@@ -1,11 +1,14 @@
+require 'digest/md5'
 require 'digest/sha1'
-require 'yaml'
+require 'digest/sha2'
 
 require 'rest_client'
 require 'thor'
-require 'SocketIO'
+require 'json'
+require 'base64'
 
 require 'claw/builder'
+require 'claw/builder/websocket'
 require 'claw/builder/package_formula'
 
 class Claw::Builder::CLI < Thor
@@ -33,8 +36,12 @@ Build a package using the FORMULA file given.
     manifest = spec.dup
     manifest[:included_files] = []
     spec[:included_files].each do |file|
-      io = File.open(file[:path], 'rb')
-      manifest[:included_files] << io
+      i = file.dup
+      i.delete :path
+      File.open(file[:path], 'rb') do |f|
+        i[:data] = Base64.strict_encode64 f.read
+      end
+      manifest[:included_files] << i
     end
 
     # initiate the build
@@ -43,38 +50,36 @@ Build a package using the FORMULA file given.
     res = JSON.parse(res)
 
     puts ">> Tailing build..."
-    done_building = false
-    client = SocketIO.connect(res['url'], :sync => true) do
-      before_start do
-        on_event('update') { |data| print data.first['data'] }
-        on_event('complete') do |data|
-          done_building = true
-          if data.first['success']
-            puts ">> Build complete"
-            puts "   Build available from #{data.first['package_url']}"
-            if data.first['checksums']
-              puts "   Checksums:"
-              data.first['checksums'].keys.sort.each do |algo|
-                puts "#{algo.upcase.rjust(12)}: #{data.first['checksums'][algo]}"
-              end
-            end
-          else
-            puts ">> Build FAILED!"
-            if data.first['error_message']
-              puts "   Error: #{data.first['error_message']}"
-            end
-          end
-        end
-      end
-      after_start do
-        emit("subscribe", { 'build' => res['channel'] })
+
+    client = WebSocket.new(res['tail_url'])
+    loop do
+      begin
+        data = client.receive()
+        print(data)
+      rescue EOFError, IOError
+        break
       end
     end
 
-    loop do
-      break if done_building
-      sleep 0.5
-    end
+    # get the details
+    puts
+    puts ">> Getting build result"
+    details = RestClient.get res['details_url'], {:accept => :json}
+    details = JSON.parse(details)
+
+    # download
+    puts ">> Downloading"
+    f = open(details['name'], 'wb')
+    f.write(RestClient.get(details['url']))
+    f.close
+
+    # validating
+    puts ">> Validating"
+    error "Invalid MD5!"    if Digest::MD5.file(details['name']).hexdigest != details['md5']
+    error "Invalid SHA1!"   if Digest::SHA1.file(details['name']).hexdigest != details['sha1']
+    error "Invalid SHA256!" if Digest::SHA2.file(details['name']).hexdigest != details['sha256']
+    puts ">> Downloaded file at #{details['name']}"
+
   rescue Interrupt
     error "Aborted by user"
   rescue Errno::EPIPE

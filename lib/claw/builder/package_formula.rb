@@ -1,3 +1,7 @@
+require 'digest/md5'
+require 'digest/sha1'
+require 'digest/sha2'
+
 class PackageFormula
   class << self
     def name(val=nil)
@@ -21,9 +25,13 @@ class PackageFormula
     end
 
     def include_file(name, opts={})
+      path = File.expand_path(name)
       @spec[:included_files] << opts.merge(
         :name => File.basename(name),
-        :path => File.expand_path(name)
+        :path => path,
+        :md5 => Digest::MD5.file(path).hexdigest,
+        :sha1 => Digest::SHA1.file(path).hexdigest,
+        :sha256 => Digest::SHA2.file(path).hexdigest
       )
       @spec[:included_files]
     end
